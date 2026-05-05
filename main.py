@@ -20,33 +20,16 @@ USER_PROFILES = [
         "dietary_restrictions": ["halal"],
         "price_range": [1, 2, 3],
     },
-    {
-        "name": "Gluten-Free User",
-        "latitude": 39.95,
-        "longitude": -75.16,
-        "max_distance": 12,
-        "preferred_cuisines": ["american", "italian", "brunch"],
-        "dietary_restrictions": ["gluten_free"],
-        "price_range": [2, 3],
-    },
-    {
-        "name": "No Dietary Restriction User",
-        "latitude": 39.95,
-        "longitude": -75.16,
-        "max_distance": 5,
-        "preferred_cuisines": ["pizza", "burgers", "sandwiches"],
-        "dietary_restrictions": [],
-        "price_range": [1, 2],
-    },
 ]
 
 
-def print_recommendations(profile, results):
+def print_recommendations(profile, model_name, results):
     print("\n" + "=" * 80)
+    print(f"Model: {model_name}")
     print(f"Recommendations for: {profile['name']}")
     print("=" * 80)
 
-    for index, row in results.iterrows():
+    for _, row in results.iterrows():
         print(f"\n{row['name']}")
         print(f"Stars: {row['stars']}")
         print(f"Review Count: {row['review_count']}")
@@ -59,8 +42,9 @@ def print_recommendations(profile, results):
 
 def main():
     for profile in USER_PROFILES:
-        results = recommend(profile, top_n=5)
-        print_recommendations(profile, results)
+        for model_name in ["logistic", "xgboost"]:
+            results = recommend(profile, model_name=model_name, top_n=5)
+            print_recommendations(profile, model_name, results)
 
 
 if __name__ == "__main__":

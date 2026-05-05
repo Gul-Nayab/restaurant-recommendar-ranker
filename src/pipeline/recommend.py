@@ -7,7 +7,6 @@ from src.features.user_feature import add_user_features
 
 
 FEATURES_PATH = Path("data/processed/restaurant_features_philadelphia.csv")
-MODEL_PATH = Path("models/logistic_model.pkl")
 
 
 FEATURE_COLUMNS = [
@@ -20,6 +19,24 @@ FEATURE_COLUMNS = [
     "price_match",
     "dietary_match",
 ]
+
+
+MODEL_PATHS = {
+    "logistic": Path("models/logistic_model.pkl"),
+    "xgboost": Path("models/xgboost_model.pkl"),
+}
+
+
+def compute_model_score(model, X):
+    probabilities = model.predict_proba(X)
+
+    class_labels = model.classes_
+
+    # Expected relevance score:
+    # P(class 0)*0 + P(class 1)*1 + ... + P(class 8)*8
+    scores = probabilities @ class_labels
+
+    return scores
 
 
 def generate_explanation(row, user_profile):
@@ -41,7 +58,7 @@ def generate_explanation(row, user_profile):
         )
 
     if row["stars"] >= 4:
-        reasons.append("high Yelp rating")
+        reasons.append("has a high Yelp rating")
 
     if not reasons:
         return "Recommended based on overall model score."
@@ -49,24 +66,24 @@ def generate_explanation(row, user_profile):
     return "Recommended because it " + ", ".join(reasons) + "."
 
 
-def recommend(user_profile, top_n=10):
+def recommend(user_profile, model_name="xgboost", top_n=10):
+    if model_name not in MODEL_PATHS:
+        raise ValueError(f"Unknown model name: {model_name}")
+
     df = pd.read_csv(FEATURES_PATH)
 
     df = add_user_features(df, user_profile)
 
-    # Optional hard filter: only consider restaurants within max distance
+    # Hard filter by distance before ranking
     df = df[df["within_distance"] == 1].copy()
 
     df = df.dropna(subset=FEATURE_COLUMNS)
 
-    model = joblib.load(MODEL_PATH)
+    model = joblib.load(MODEL_PATHS[model_name])
 
     X = df[FEATURE_COLUMNS]
 
-    if hasattr(model, "predict_proba"):
-        df["score"] = model.predict_proba(X).max(axis=1)
-    else:
-        df["score"] = model.predict(X)
+    df["score"] = compute_model_score(model, X)
 
     df = df.sort_values("score", ascending=False)
 
@@ -80,6 +97,8 @@ def recommend(user_profile, top_n=10):
     return results[
         [
             "name",
+            "city",
+            "state",
             "stars",
             "review_count",
             "price_level",
