@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 
 
-RESTAURANTS_PATH = Path("../data/processed/restaurants_philadelphia.csv")
-REVIEWS_PATH = Path("../data/processed/reviews_philadelphia.csv")
-OUTPUT_PATH = Path("../data/processed/restaurant_features_philadelphia.csv")
+RESTAURANTS_PATH = Path("data/processed/restaurants_philadelphia.csv")
+REVIEWS_PATH = Path("data/processed/reviews_philadelphia.csv")
+OUTPUT_PATH = Path("data/processed/restaurant_features_philadelphia.csv")
 
 
 DIETARY_KEYWORDS = {

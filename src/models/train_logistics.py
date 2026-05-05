@@ -6,7 +6,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 
-from src.features.user_features import add_user_features
+from src.features.user_feature import add_user_features
 
 
 FEATURES_PATH = Path("data/processed/restaurant_features_philadelphia.csv")

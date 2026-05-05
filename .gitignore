@@ -41,3 +41,6 @@ vscode/
 # Miscellaneous
 *.mo
 *.pot
+
+# saved models
+*.pkl
