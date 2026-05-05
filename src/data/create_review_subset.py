@@ -2,33 +2,62 @@ from pathlib import Path
 import pandas as pd
 
 
-business_data_subset_path = Path("data/processed/restaurants_philadelphia.csv")
-raw_review_data_path = Path("data/raw/yelp_dataset/yelp_academic_dataset_review.json")
-output_review_subset_path = Path("data/processed/reviews_philadelphia.csv")
+RAW_REVIEW_PATH = Path("data/raw/yelp_dataset/yelp_academic_dataset_review.json")
+
+KEEP_COLS = ["review_id", "business_id", "stars", "text", "date", "useful"]
 
 
-business_df = pd.read_csv(business_data_subset_path)
-business_ids = set(business_df["business_id"].unique())
+def load_business_ids(business_subset_path: Path) -> set:
+    business_df = pd.read_csv(business_subset_path)
+    return set(business_df["business_id"].unique())
 
-keep_cols = ["review_id", "business_id", "stars", "text", "date", "useful"]
-chunk_size = 10000
-first_write = True
 
-print("Loading reviews in chunks...")
+def filter_review_chunk(chunk: pd.DataFrame, business_ids: set) -> pd.DataFrame:
+    filtered_chunk = chunk[chunk["business_id"].isin(business_ids)].copy()
 
-for chunk in pd.read_json(raw_review_data_path, lines=True, chunksize=chunk_size):
-    filtered_chunk = chunk[chunk["business_id"].isin(business_ids)]
+    if filtered_chunk.empty:
+        return filtered_chunk
 
-    if not filtered_chunk.empty:
-        existing_cols = [col for col in keep_cols if col in filtered_chunk.columns]
-        filtered_chunk = filtered_chunk[existing_cols]
+    existing_cols = [col for col in KEEP_COLS if col in filtered_chunk.columns]
+    return filtered_chunk[existing_cols]
 
-        filtered_chunk.to_csv(
-            output_review_subset_path,
-            mode="w" if first_write else "a",
-            header=first_write,
-            index=False,
-        )
-        first_write = False
 
-print("Saved review subset:", output_review_subset_path)
+def create_review_subset(
+    business_subset_path: Path,
+    output_review_subset_path: Path,
+    raw_review_path: Path = RAW_REVIEW_PATH,
+    chunk_size: int = 10000,
+) -> None:
+    output_review_subset_path.parent.mkdir(parents=True, exist_ok=True)
+
+    business_ids = load_business_ids(business_subset_path)
+
+    first_write = True
+    total_rows = 0
+
+    print("Loading reviews in chunks...")
+    print("Number of businesses:", len(business_ids))
+
+    for chunk in pd.read_json(raw_review_path, lines=True, chunksize=chunk_size):
+        filtered_chunk = filter_review_chunk(chunk, business_ids)
+
+        if not filtered_chunk.empty:
+            filtered_chunk.to_csv(
+                output_review_subset_path,
+                mode="w" if first_write else "a",
+                header=first_write,
+                index=False,
+            )
+
+            first_write = False
+            total_rows += len(filtered_chunk)
+
+    print("Saved review subset:", output_review_subset_path)
+    print("Review rows saved:", total_rows)
+
+
+if __name__ == "__main__":
+    create_review_subset(
+        business_subset_path=Path("data/processed/restaurants_philadelphia.csv"),
+        output_review_subset_path=Path("data/processed/reviews_philadelphia.csv"),
+    )
