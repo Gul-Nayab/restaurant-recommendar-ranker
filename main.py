@@ -3,7 +3,9 @@ from src.pipeline.recommend import recommend
 
 USER_PROFILES = [
     {
-        "name": "Vegan Budget User",
+        "name": "Philadelphia Vegan Budget User",
+        "city": "Philadelphia",
+        "state": "PA",
         "latitude": 39.95,
         "longitude": -75.16,
         "max_distance": 10,
@@ -12,49 +14,48 @@ USER_PROFILES = [
         "price_range": [1, 2],
     },
     {
-        "name": "Halal Food User",
-        "latitude": 39.95,
-        "longitude": -75.16,
-        "max_distance": 8,
+        "name": "Tampa Halal User",
+        "city": "Tampa",
+        "state": "FL",
+        "latitude": 27.95,
+        "longitude": -82.46,
+        "max_distance": 10,
         "preferred_cuisines": ["middle eastern", "indian", "pakistani"],
         "dietary_restrictions": ["halal"],
         "price_range": [1, 2, 3],
     },
     {
-        "name": "Gluten-Free Italian User",
-        "latitude": 39.95,
-        "longitude": -75.16,
+        "name": "Tucson Gluten-Free Italian User",
+        "city": "Tucson",
+        "state": "AZ",
+        "latitude": 32.22,
+        "longitude": -110.97,
         "max_distance": 10,
         "preferred_cuisines": ["italian", "pizza"],
         "dietary_restrictions": ["gluten_free"],
         "price_range": [2, 3],
     },
     {
-        "name": "Vegetarian Brunch User",
-        "latitude": 39.95,
-        "longitude": -75.16,
-        "max_distance": 6,
+        "name": "Indianapolis Vegetarian Brunch User",
+        "city": "Indianapolis",
+        "state": "IN",
+        "latitude": 39.77,
+        "longitude": -86.16,
+        "max_distance": 8,
         "preferred_cuisines": ["brunch", "breakfast", "cafe"],
         "dietary_restrictions": ["vegetarian"],
         "price_range": [1, 2],
     },
     {
-        "name": "Budget Pizza User",
-        "latitude": 39.95,
-        "longitude": -75.16,
-        "max_distance": 5,
+        "name": "Nashville Budget Pizza User",
+        "city": "Nashville",
+        "state": "TN",
+        "latitude": 36.16,
+        "longitude": -86.78,
+        "max_distance": 8,
         "preferred_cuisines": ["pizza", "italian"],
         "dietary_restrictions": [],
         "price_range": [1, 2],
-    },
-    {
-        "name": "High-End Sushi User",
-        "latitude": 39.95,
-        "longitude": -75.16,
-        "max_distance": 12,
-        "preferred_cuisines": ["sushi", "japanese"],
-        "dietary_restrictions": [],
-        "price_range": [3, 4],
     },
 ]
 
@@ -62,8 +63,12 @@ USER_PROFILES = [
 def print_recommendations(profile, model_name, results):
     print(f"Recommendations for: {profile['name']}")
 
+    if results.empty:
+        print("No restaurants found for this profile.")
+        return
+
     for _, row in results.iterrows():
-        print(f"\n{row['name']}")
+        print(f"\n{row['name']} ({row['city']}, {row['state']})")
         print(f"Stars: {row['stars']}")
         print(f"Review Count: {row['review_count']}")
         print(f"Price Level: {row['price_level']}")
@@ -74,10 +79,15 @@ def print_recommendations(profile, model_name, results):
 
 
 def main():
+    model_name = "xgboost"
+
     for profile in USER_PROFILES:
-        # for model_name in ["logistic", "xgboost"]:
-        model_name = "xgboost"
-        results = recommend(profile, model_name=model_name, top_n=5)
+        results = recommend(
+            user_profile=profile,
+            model_name=model_name,
+            top_n=5,
+        )
+
         print_recommendations(profile, model_name, results)
 
 
