@@ -1,12 +1,13 @@
 from pathlib import Path
 import re
+
 import numpy as np
 import pandas as pd
 
 
-RESTAURANTS_PATH = Path("data/processed/restaurants_philadelphia.csv")
-REVIEWS_PATH = Path("data/processed/reviews_philadelphia.csv")
-OUTPUT_PATH = Path("data/processed/restaurant_features_philadelphia.csv")
+RESTAURANTS_PATH = Path("data/processed/restaurants_all_cities.csv")
+REVIEWS_PATH = Path("data/processed/reviews_all_cities.csv")
+OUTPUT_PATH = Path("data/processed/restaurant_features_all_cities.csv")
 
 
 DIETARY_KEYWORDS = {
@@ -20,16 +21,11 @@ DIETARY_KEYWORDS = {
 def clean_categories(categories):
     if pd.isna(categories):
         return []
+
     return [cat.strip().lower() for cat in str(categories).split(",")]
 
 
 def extract_price(attributes):
-    """
-    Yelp stores price in attributes as something like:
-    {'RestaurantsPriceRange2': '2', ...}
-
-    Since it may load as a string from CSV, this function uses regex.
-    """
     if pd.isna(attributes):
         return np.nan
 
@@ -51,6 +47,14 @@ def count_keyword_matches(text, keywords):
     return sum(text.count(keyword) for keyword in keywords)
 
 
+def category_contains(categories, keywords):
+    if pd.isna(categories):
+        return 0
+
+    categories = str(categories).lower()
+    return int(any(keyword in categories for keyword in keywords))
+
+
 def add_basic_restaurant_features(restaurants_df):
     df = restaurants_df.copy()
 
@@ -64,63 +68,108 @@ def add_basic_restaurant_features(restaurants_df):
     df["stars"] = df["stars"].fillna(df["stars"].median())
     df["review_count"] = df["review_count"].fillna(0)
 
-    # Log scale helps because review counts are usually very skewed
     df["log_review_count"] = np.log1p(df["review_count"])
+
+    # Category-based dietary signals
+    df["category_vegan_signal"] = df["categories"].apply(
+        lambda x: category_contains(x, ["vegan"])
+    )
+    df["category_vegetarian_signal"] = df["categories"].apply(
+        lambda x: category_contains(x, ["vegetarian"])
+    )
+    df["category_halal_signal"] = df["categories"].apply(
+        lambda x: category_contains(x, ["halal"])
+    )
+    df["category_gluten_free_signal"] = df["categories"].apply(
+        lambda x: category_contains(x, ["gluten-free", "gluten free"])
+    )
 
     return df
 
 
-def build_review_keyword_features(reviews_df):
-    df = reviews_df.copy()
-    df["text"] = df["text"].fillna("").str.lower()
+def build_review_features_from_csv(reviews_path: Path, chunksize: int = 50000):
+    aggregate_chunks = []
+    chunk_number = 0
 
-    keyword_features = pd.DataFrame()
-    keyword_features["business_id"] = df["business_id"]
+    for chunk in pd.read_csv(reviews_path, chunksize=chunksize):
+        chunk_number += 1
 
-    for feature_name, keywords in DIETARY_KEYWORDS.items():
-        keyword_features[f"{feature_name}_review_mentions"] = df["text"].apply(
-            lambda text: count_keyword_matches(text, keywords)
+        chunk["text"] = chunk["text"].fillna("").astype(str).str.lower()
+        chunk["review_length"] = chunk["text"].str.len()
+
+        for feature_name, keywords in DIETARY_KEYWORDS.items():
+            chunk[f"{feature_name}_review_mentions"] = chunk["text"].apply(
+                lambda text: count_keyword_matches(text, keywords)
+            )
+
+        chunk["stars_sum"] = chunk["stars"]
+        chunk["stars_count"] = chunk["stars"].notna().astype(int)
+        chunk["review_text_count"] = 1
+        chunk["review_length_sum"] = chunk["review_length"]
+        chunk["useful_sum"] = chunk["useful"].fillna(0)
+
+        grouped = (
+            chunk.groupby("business_id")
+            .agg(
+                vegan_review_mentions=("vegan_review_mentions", "sum"),
+                vegetarian_review_mentions=("vegetarian_review_mentions", "sum"),
+                halal_review_mentions=("halal_review_mentions", "sum"),
+                gluten_free_review_mentions=("gluten_free_review_mentions", "sum"),
+                stars_sum=("stars_sum", "sum"),
+                stars_count=("stars_count", "sum"),
+                review_text_count=("review_text_count", "sum"),
+                review_length_sum=("review_length_sum", "sum"),
+                total_useful_votes=("useful_sum", "sum"),
+            )
+            .reset_index()
         )
 
-    grouped = keyword_features.groupby("business_id").sum().reset_index()
+        aggregate_chunks.append(grouped)
 
-    return grouped
+        if chunk_number % 25 == 0:
+            print(f"Processed {chunk_number} review chunks...")
 
+    if not aggregate_chunks:
+        return pd.DataFrame(columns=["business_id"])
 
-def build_review_summary_features(reviews_df):
-    df = reviews_df.copy()
+    all_review_features = pd.concat(aggregate_chunks, ignore_index=True)
 
-    df["text"] = df["text"].fillna("")
-    df["review_length"] = df["text"].str.len()
-
-    summary = (
-        df.groupby("business_id")
+    final = (
+        all_review_features.groupby("business_id")
         .agg(
-            avg_review_stars=("stars", "mean"),
-            review_text_count=("text", "count"),
-            avg_review_length=("review_length", "mean"),
-            total_useful_votes=("useful", "sum"),
+            vegan_review_mentions=("vegan_review_mentions", "sum"),
+            vegetarian_review_mentions=("vegetarian_review_mentions", "sum"),
+            halal_review_mentions=("halal_review_mentions", "sum"),
+            gluten_free_review_mentions=("gluten_free_review_mentions", "sum"),
+            stars_sum=("stars_sum", "sum"),
+            stars_count=("stars_count", "sum"),
+            review_text_count=("review_text_count", "sum"),
+            review_length_sum=("review_length_sum", "sum"),
+            total_useful_votes=("total_useful_votes", "sum"),
         )
         .reset_index()
     )
 
-    return summary
+    final["avg_review_stars"] = final["stars_sum"] / final["stars_count"].replace(
+        0, np.nan
+    )
+    final["avg_review_length"] = final["review_length_sum"] / final[
+        "review_text_count"
+    ].replace(0, np.nan)
+
+    final = final.drop(columns=["stars_sum", "stars_count", "review_length_sum"])
+
+    final["avg_review_stars"] = final["avg_review_stars"].fillna(0)
+    final["avg_review_length"] = final["avg_review_length"].fillna(0)
+
+    return final
 
 
-def build_feature_table(restaurants_df, reviews_df):
+def build_feature_table(restaurants_df, review_features_df):
     restaurant_features = add_basic_restaurant_features(restaurants_df)
 
-    keyword_features = build_review_keyword_features(reviews_df)
-    review_summary = build_review_summary_features(reviews_df)
-
     features_df = restaurant_features.merge(
-        keyword_features,
-        on="business_id",
-        how="left",
-    )
-
-    features_df = features_df.merge(
-        review_summary,
+        review_features_df,
         on="business_id",
         how="left",
     )
@@ -145,39 +194,60 @@ def build_feature_table(restaurants_df, reviews_df):
     for col in review_summary_cols:
         features_df[col] = features_df[col].fillna(0)
 
-    # Binary compatibility-style flags
-    features_df["has_vegan_signal"] = (features_df["vegan_review_mentions"] > 0).astype(
-        int
-    )
-
-    features_df["has_vegetarian_signal"] = (
-        features_df["vegetarian_review_mentions"] > 0
+    features_df["has_vegan_signal"] = (
+        (features_df["vegan_review_mentions"] > 0)
+        | (features_df["category_vegan_signal"] == 1)
     ).astype(int)
 
-    features_df["has_halal_signal"] = (features_df["halal_review_mentions"] > 0).astype(
-        int
-    )
+    features_df["has_vegetarian_signal"] = (
+        (features_df["vegetarian_review_mentions"] > 0)
+        | (features_df["category_vegetarian_signal"] == 1)
+    ).astype(int)
+
+    features_df["has_halal_signal"] = (
+        (features_df["halal_review_mentions"] > 0)
+        | (features_df["category_halal_signal"] == 1)
+    ).astype(int)
 
     features_df["has_gluten_free_signal"] = (
-        features_df["gluten_free_review_mentions"] > 0
+        (features_df["gluten_free_review_mentions"] > 0)
+        | (features_df["category_gluten_free_signal"] == 1)
     ).astype(int)
 
     return features_df
 
 
-def main():
-    restaurants_df = pd.read_csv(RESTAURANTS_PATH)
-    reviews_df = pd.read_csv(REVIEWS_PATH)
+def create_feature_file(
+    restaurants_path: Path = RESTAURANTS_PATH,
+    reviews_path: Path = REVIEWS_PATH,
+    output_path: Path = OUTPUT_PATH,
+) -> pd.DataFrame:
+    if not restaurants_path.exists():
+        raise FileNotFoundError(f"Missing restaurants file: {restaurants_path}")
 
-    features_df = build_feature_table(restaurants_df, reviews_df)
+    if not reviews_path.exists():
+        raise FileNotFoundError(f"Missing reviews file: {reviews_path}")
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    features_df.to_csv(OUTPUT_PATH, index=False)
+    print(f"Loading restaurants from: {restaurants_path}")
+    restaurants_df = pd.read_csv(restaurants_path)
 
-    print("Feature table saved to:", OUTPUT_PATH)
+    print(f"Building review features from: {reviews_path}")
+    review_features_df = build_review_features_from_csv(reviews_path)
+
+    print("Building final restaurant feature table...")
+    features_df = build_feature_table(restaurants_df, review_features_df)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    features_df.to_csv(output_path, index=False)
+
+    print("Feature table saved to:", output_path)
     print("Shape:", features_df.shape)
-    print("Columns:")
-    print(features_df.columns.tolist())
+
+    return features_df
+
+
+def main():
+    create_feature_file()
 
 
 if __name__ == "__main__":
