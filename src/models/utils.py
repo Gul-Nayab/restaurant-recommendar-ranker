@@ -32,32 +32,35 @@ def create_labels(df, add_noise=True):
 
 
 def filter_candidates_for_user(restaurants_df, user):
-    candidate_df = restaurants_df
+    candidate_df = restaurants_df.copy()
 
     if "city" in user and user["city"] and "city" in candidate_df.columns:
-        candidate_df = candidate_df[
-            candidate_df["city"].str.lower() == user["city"].lower()
+        city_df = candidate_df[
+            candidate_df["city"].fillna("").str.lower() == user["city"].lower()
         ]
+
+        if not city_df.empty:
+            candidate_df = city_df
 
     if "state" in user and user["state"] and "state" in candidate_df.columns:
-        candidate_df = candidate_df[
-            candidate_df["state"].str.lower() == user["state"].lower()
+        state_df = candidate_df[
+            candidate_df["state"].fillna("").str.lower() == user["state"].lower()
         ]
 
-    if candidate_df.empty:
-        return restaurants_df
+        if not state_df.empty:
+            candidate_df = state_df
 
     return candidate_df.copy()
 
 
-def build_training_data(restaurants_df, user_profiles):
+def build_training_data(restaurants_df, user_profiles, add_noise=True):
     training_rows = []
 
     for user in user_profiles:
         candidate_df = filter_candidates_for_user(restaurants_df, user)
 
         user_df = add_user_features(candidate_df, user)
-        user_df = create_labels(user_df, add_noise=True)
+        user_df = create_labels(user_df, add_noise=add_noise)
         user_df["user_id"] = user["user_id"]
 
         training_rows.append(user_df)
