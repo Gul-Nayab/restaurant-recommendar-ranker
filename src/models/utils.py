@@ -1,30 +1,13 @@
-from pathlib import Path
 import json
+
 import numpy as np
 import pandas as pd
 
 from src.features.user_feature import add_user_features
 
 
-FEATURES_PATH = Path("data/processed/restaurant_features_philadelphia.csv")
-USER_PROFILES_PATH = Path("data/processed/user_profiles_philadelphia.json")
-MODEL_PATH = Path("models/logistic_model.pkl")
-
-
-FEATURE_COLUMNS = [
-    "stars",
-    "log_review_count",
-    "price_level",
-    "distance",
-    "within_distance",
-    "cuisine_match",
-    "price_match",
-    "dietary_match",
-]
-
-
-def load_user_profiles():
-    with open(USER_PROFILES_PATH, "r", encoding="utf-8") as file:
+def load_user_profiles(user_profiles_path):
+    with open(user_profiles_path, "r", encoding="utf-8") as file:
         return json.load(file)
 
 
@@ -48,11 +31,32 @@ def create_labels(df, add_noise=True):
     return df
 
 
+def filter_candidates_for_user(restaurants_df, user):
+    candidate_df = restaurants_df
+
+    if "city" in user and user["city"] and "city" in candidate_df.columns:
+        candidate_df = candidate_df[
+            candidate_df["city"].str.lower() == user["city"].lower()
+        ]
+
+    if "state" in user and user["state"] and "state" in candidate_df.columns:
+        candidate_df = candidate_df[
+            candidate_df["state"].str.lower() == user["state"].lower()
+        ]
+
+    if candidate_df.empty:
+        return restaurants_df
+
+    return candidate_df.copy()
+
+
 def build_training_data(restaurants_df, user_profiles):
     training_rows = []
 
     for user in user_profiles:
-        user_df = add_user_features(restaurants_df, user)
+        candidate_df = filter_candidates_for_user(restaurants_df, user)
+
+        user_df = add_user_features(candidate_df, user)
         user_df = create_labels(user_df, add_noise=True)
         user_df["user_id"] = user["user_id"]
 

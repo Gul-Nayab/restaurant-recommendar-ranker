@@ -6,7 +6,12 @@ import pandas as pd
 from src.features.user_feature import add_user_features
 
 
-FEATURES_PATH = Path("data/processed/restaurant_features_philadelphia.csv")
+FEATURES_PATH = Path("data/processed/restaurant_features_all_cities.csv")
+
+MODEL_PATHS = {
+    "logistic": Path("models/all_cities/logistic_model.pkl"),
+    "xgboost": Path("models/all_cities/xgboost_model.pkl"),
+}
 
 
 FEATURE_COLUMNS = [
@@ -21,22 +26,11 @@ FEATURE_COLUMNS = [
 ]
 
 
-MODEL_PATHS = {
-    "logistic": Path("models/logistic_model.pkl"),
-    "xgboost": Path("models/xgboost_model.pkl"),
-}
-
-
 def compute_model_score(model, X):
     probabilities = model.predict_proba(X)
-
     class_labels = model.classes_
 
-    # Expected relevance score:
-    # P(class 0)*0 + P(class 1)*1 + ... + P(class 8)*8
-    scores = probabilities @ class_labels
-
-    return scores
+    return probabilities @ class_labels
 
 
 def generate_explanation(row, user_profile):
@@ -62,16 +56,58 @@ def generate_explanation(row, user_profile):
     return "Recommended because " + ", ".join(reasons) + "."
 
 
+def filter_by_location_fields(df, user_profile):
+    filtered_df = df
+
+    if "city" in user_profile and user_profile["city"]:
+        city_df = filtered_df[
+            filtered_df["city"].str.lower() == user_profile["city"].lower()
+        ]
+
+        if not city_df.empty:
+            filtered_df = city_df
+
+    if "state" in user_profile and user_profile["state"]:
+        state_df = filtered_df[
+            filtered_df["state"].str.lower() == user_profile["state"].lower()
+        ]
+
+        if not state_df.empty:
+            filtered_df = state_df
+
+    return filtered_df.copy()
+
+
 def recommend(user_profile, model_name="xgboost", top_n=10):
     if model_name not in MODEL_PATHS:
         raise ValueError(f"Unknown model name: {model_name}")
 
     df = pd.read_csv(FEATURES_PATH)
 
+    # Optional speed-up: if city/state are provided, search there first.
+    # This is not switching datasets. It is just filtering the all-cities dataset.
+    df = filter_by_location_fields(df, user_profile)
+
     df = add_user_features(df, user_profile)
 
-    # Hard filter by distance before ranking
+    # Hard filter by max distance
     df = df[df["within_distance"] == 1].copy()
+
+    if df.empty:
+        return pd.DataFrame(
+            columns=[
+                "name",
+                "city",
+                "state",
+                "stars",
+                "review_count",
+                "price_level",
+                "distance",
+                "categories",
+                "score",
+                "explanation",
+            ]
+        )
 
     df = df.dropna(subset=FEATURE_COLUMNS)
 
@@ -82,7 +118,12 @@ def recommend(user_profile, model_name="xgboost", top_n=10):
     df["score"] = compute_model_score(model, X)
 
     df = df.sort_values("score", ascending=False)
-    df = df.drop_duplicates(subset=["name", "latitude", "longitude"], keep="first")
+
+    df = df.drop_duplicates(
+        subset=["name", "latitude", "longitude"],
+        keep="first",
+    )
+
     results = df.head(top_n).copy()
 
     results["explanation"] = results.apply(
