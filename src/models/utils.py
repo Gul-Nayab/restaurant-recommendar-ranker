@@ -40,7 +40,7 @@ def create_labels(df, add_noise=True):
     )
 
     if add_noise:
-        noise = np.random.normal(loc=0, scale=0.5, size=len(df))
+        noise = np.random.normal(loc=0, scale=0.25, size=len(df))
         df["label_score"] = df["label_score"] + noise
 
     df["label"] = df["label_score"].round().clip(0, 8).astype(int)

@@ -42,28 +42,24 @@ def compute_model_score(model, X):
 def generate_explanation(row, user_profile):
     reasons = []
 
-    if row["within_distance"] == 1:
-        reasons.append(f"within {user_profile['max_distance']} miles")
+    reasons.append(f"it is {row['distance']:.2f} miles away")
 
     if row["cuisine_match"] == 1:
-        reasons.append("matches preferred cuisine")
+        cuisines = ", ".join(user_profile.get("preferred_cuisines", []))
+        reasons.append(f"matches your cuisine preferences: {cuisines}")
 
     if row["price_match"] == 1:
-        reasons.append("matches price preference")
+        reasons.append("matches your preferred price range")
 
     if row["dietary_match"] == 1 and user_profile.get("dietary_restrictions"):
-        reasons.append(
-            "matches dietary restriction: "
-            + ", ".join(user_profile["dietary_restrictions"])
-        )
+        dietary = ", ".join(user_profile["dietary_restrictions"])
+        reasons.append(f"supports your dietary restriction: {dietary}")
 
-    if row["stars"] >= 4:
-        reasons.append("has a high Yelp rating")
+    reasons.append(
+        f"has a {row['stars']} star rating with {int(row['review_count'])} reviews"
+    )
 
-    if not reasons:
-        return "Recommended based on overall model score."
-
-    return "Recommended because it " + ", ".join(reasons) + "."
+    return "Recommended because " + ", ".join(reasons) + "."
 
 
 def recommend(user_profile, model_name="xgboost", top_n=10):
@@ -86,7 +82,7 @@ def recommend(user_profile, model_name="xgboost", top_n=10):
     df["score"] = compute_model_score(model, X)
 
     df = df.sort_values("score", ascending=False)
-
+    df = df.drop_duplicates(subset=["name", "latitude", "longitude"], keep="first")
     results = df.head(top_n).copy()
 
     results["explanation"] = results.apply(

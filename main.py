@@ -20,14 +20,47 @@ USER_PROFILES = [
         "dietary_restrictions": ["halal"],
         "price_range": [1, 2, 3],
     },
+    {
+        "name": "Gluten-Free Italian User",
+        "latitude": 39.95,
+        "longitude": -75.16,
+        "max_distance": 10,
+        "preferred_cuisines": ["italian", "pizza"],
+        "dietary_restrictions": ["gluten_free"],
+        "price_range": [2, 3],
+    },
+    {
+        "name": "Vegetarian Brunch User",
+        "latitude": 39.95,
+        "longitude": -75.16,
+        "max_distance": 6,
+        "preferred_cuisines": ["brunch", "breakfast", "cafe"],
+        "dietary_restrictions": ["vegetarian"],
+        "price_range": [1, 2],
+    },
+    {
+        "name": "Budget Pizza User",
+        "latitude": 39.95,
+        "longitude": -75.16,
+        "max_distance": 5,
+        "preferred_cuisines": ["pizza", "italian"],
+        "dietary_restrictions": [],
+        "price_range": [1, 2],
+    },
+    {
+        "name": "High-End Sushi User",
+        "latitude": 39.95,
+        "longitude": -75.16,
+        "max_distance": 12,
+        "preferred_cuisines": ["sushi", "japanese"],
+        "dietary_restrictions": [],
+        "price_range": [3, 4],
+    },
 ]
 
 
 def print_recommendations(profile, model_name, results):
-    print("\n" + "=" * 80)
-    print(f"Model: {model_name}")
     print(f"Recommendations for: {profile['name']}")
-    print("=" * 80)
 
     for _, row in results.iterrows():
         print(f"\n{row['name']}")
@@ -42,9 +75,10 @@ def print_recommendations(profile, model_name, results):
 
 def main():
     for profile in USER_PROFILES:
-        for model_name in ["logistic", "xgboost"]:
-            results = recommend(profile, model_name=model_name, top_n=5)
-            print_recommendations(profile, model_name, results)
+        # for model_name in ["logistic", "xgboost"]:
+        model_name = "xgboost"
+        results = recommend(profile, model_name=model_name, top_n=5)
+        print_recommendations(profile, model_name, results)
 
 
 if __name__ == "__main__":
