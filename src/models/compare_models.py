@@ -15,8 +15,14 @@ from xgboost import XGBClassifier
 from src.models.utils import load_user_profiles, build_training_data
 
 
-FEATURES_PATH = Path("data/processed/restaurant_features_philadelphia.csv")
-RESULTS_PATH = Path("data/processed/model_comparison_results.csv")
+FEATURES_PATH = Path("data/processed/restaurant_features_all_cities.csv")
+USER_PROFILES_PATH = Path("data/processed/user_profiles_all_cities.json")
+RESULTS_PATH = Path(
+    "data/processed/model_comparison/model_comparison_results_all_cities.csv"
+)
+
+LOGISTIC_MODEL_PATH = Path("models/all_cities/logistic_model.pkl")
+XGBOOST_MODEL_PATH = Path("models/all_cities/xgboost_model.pkl")
 
 
 FEATURE_COLUMNS = [
@@ -46,26 +52,41 @@ def evaluate_model(name, model, X_train, X_test, y_train, y_test):
         "inference_time_seconds": inference_time,
         "accuracy": accuracy_score(y_test, predictions),
         "precision_weighted": precision_score(
-            y_test, predictions, average="weighted", zero_division=0
+            y_test,
+            predictions,
+            average="weighted",
+            zero_division=0,
         ),
         "recall_weighted": recall_score(
-            y_test, predictions, average="weighted", zero_division=0
+            y_test,
+            predictions,
+            average="weighted",
+            zero_division=0,
         ),
         "f1_weighted": f1_score(
-            y_test, predictions, average="weighted", zero_division=0
+            y_test,
+            predictions,
+            average="weighted",
+            zero_division=0,
         ),
     }
 
 
 def main():
     restaurants_df = pd.read_csv(FEATURES_PATH)
-    user_profiles = load_user_profiles()
+    user_profiles = load_user_profiles(USER_PROFILES_PATH)
 
     training_df = build_training_data(restaurants_df, user_profiles)
+
     training_df = training_df.dropna(subset=FEATURE_COLUMNS + ["label"])
 
     X = training_df[FEATURE_COLUMNS]
     y = training_df["label"].astype(int)
+
+    print("Training rows:", X.shape[0])
+    print("Feature columns:", FEATURE_COLUMNS)
+    print("Label distribution:")
+    print(y.value_counts().sort_index())
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
@@ -84,7 +105,7 @@ def main():
                     ("logreg", LogisticRegression(max_iter=3000)),
                 ]
             ),
-            Path("models/logistic_model.pkl"),
+            LOGISTIC_MODEL_PATH,
         ),
         (
             "XGBoost",
@@ -96,7 +117,7 @@ def main():
                 eval_metric="mlogloss",
                 random_state=42,
             ),
-            Path("models/xgboost_model.pkl"),
+            XGBOOST_MODEL_PATH,
         ),
     ]
 
@@ -116,7 +137,10 @@ def main():
 
     print("\nModel Comparison Results:")
     print(results_df)
+
     print(f"\nSaved results to {RESULTS_PATH}")
+    print(f"Saved Logistic Regression to {LOGISTIC_MODEL_PATH}")
+    print(f"Saved XGBoost to {XGBOOST_MODEL_PATH}")
 
 
 if __name__ == "__main__":

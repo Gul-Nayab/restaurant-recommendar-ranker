@@ -12,9 +12,10 @@ from sklearn.preprocessing import StandardScaler
 
 from src.models.utils import load_user_profiles, build_training_data
 
-FEATURES_PATH = Path("data/processed/restaurant_features_philadelphia.csv")
-USER_PROFILES_PATH = Path("data/processed/user_profiles_philadelphia.json")
-MODEL_PATH = Path("models/logistic_model.pkl")
+
+FEATURES_PATH = Path("data/processed/restaurant_features_all_cities.csv")
+USER_PROFILES_PATH = Path("data/processed/user_profiles_all_cities.json")
+MODEL_PATH = Path("models/all_cities/logistic_model.pkl")
 
 
 FEATURE_COLUMNS = [
@@ -31,14 +32,18 @@ FEATURE_COLUMNS = [
 
 def train_logistic():
     restaurants_df = pd.read_csv(FEATURES_PATH)
-    user_profiles = load_user_profiles()
+    user_profiles = load_user_profiles(USER_PROFILES_PATH)
 
     training_df = build_training_data(restaurants_df, user_profiles)
 
     training_df = training_df.dropna(subset=FEATURE_COLUMNS + ["label"])
 
     X = training_df[FEATURE_COLUMNS]
-    y = training_df["label"]
+    y = training_df["label"].astype(int)
+
+    print("Training rows:", X.shape[0])
+    print("Label distribution:")
+    print(y.value_counts().sort_index())
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
