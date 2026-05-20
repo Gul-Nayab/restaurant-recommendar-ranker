@@ -57,11 +57,11 @@ def generate_explanation(row, user_profile):
 
 
 def filter_by_location_fields(df, user_profile):
-    filtered_df = df
+    filtered_df = df.copy()
 
     if "city" in user_profile and user_profile["city"]:
         city_df = filtered_df[
-            filtered_df["city"].str.lower() == user_profile["city"].lower()
+            filtered_df["city"].fillna("").str.lower() == user_profile["city"].lower()
         ]
 
         if not city_df.empty:
@@ -69,7 +69,7 @@ def filter_by_location_fields(df, user_profile):
 
     if "state" in user_profile and user_profile["state"]:
         state_df = filtered_df[
-            filtered_df["state"].str.lower() == user_profile["state"].lower()
+            filtered_df["state"].fillna("").str.lower() == user_profile["state"].lower()
         ]
 
         if not state_df.empty:
@@ -84,13 +84,10 @@ def recommend(user_profile, model_name="xgboost", top_n=10):
 
     df = pd.read_csv(FEATURES_PATH)
 
-    # Optional speed-up: if city/state are provided, search there first.
-    # This is not switching datasets. It is just filtering the all-cities dataset.
     df = filter_by_location_fields(df, user_profile)
 
     df = add_user_features(df, user_profile)
 
-    # Hard filter by max distance
     df = df[df["within_distance"] == 1].copy()
 
     if df.empty:
